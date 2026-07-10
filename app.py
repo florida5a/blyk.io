@@ -4,8 +4,10 @@ import base64
 import re
 from PIL import Image, ImageDraw
 import io
+import cv2
+import numpy as np
 
-# Настройка страницы (Широкий экран, скрываем сайдбары)
+# Настройка страницы
 st.set_page_config(page_title="Blyk.io | ИИ-проверка", page_icon="👁️", layout="wide", initial_sidebar_state="collapsed")
 
 # Премиальный CSS 
@@ -42,7 +44,6 @@ st.markdown("""
 st.markdown('<div class="blyk-title">👁️ Blyk.io</div>', unsafe_allow_html=True)
 st.markdown('<div class="blyk-subtitle">AI-рентген для проверки медицинских документов</div>', unsafe_allow_html=True)
 
-# Зона загрузки
 uploaded_file = st.file_uploader("Перетащите скан или фото справки сюда", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
@@ -50,19 +51,14 @@ if uploaded_file is not None:
     
     col1, col2 = st.columns([4.5, 5.5], gap="large")
     
-    # Левая колонка: Фото и умная цензура
     with col1:
-        # Открываем изображение через PIL
         image = Image.open(uploaded_file).convert("RGB")
         
         st.markdown("##### 🛡️ Защита данных (PII)")
         censor_toggle = st.checkbox("Включить авто-цензуру ФИО", value=True)
         
         if censor_toggle:
-            # Ползунок для выбора зоны скрытия
             censor_range = st.slider("Настройте черную полосу (зона скрытия сверху-вниз в %)", 0, 100, (20, 35))
-            
-            # Рисуем черный прямоугольник на копии изображения
             draw = ImageDraw.Draw(image)
             w, h = image.size
             y0 = int(h * (censor_range[0] / 100))
@@ -72,7 +68,6 @@ if uploaded_file is not None:
             
         st.image(image, use_container_width=True)
         
-    # Правая колонка: Анализ и результаты
     with col2:
         if "OPENROUTER_API_KEY" not in st.secrets:
             st.error("Системное уведомление: Добавьте API-ключ в настройки Secrets.")
@@ -80,32 +75,48 @@ if uploaded_file is not None:
             api_key = st.secrets["OPENROUTER_API_KEY"]
             
             st.markdown("### ⚡ Запуск верификации")
-            st.write("ИИ проверит ГОСТ-реквизиты и логику документа (ФИО пациента не передаются на сервер).")
+            st.write("ИИ проверит ГОСТ-реквизиты, логику, юридический статус и скрытые QR-коды.")
             st.markdown("<br>", unsafe_allow_html=True)
             
             if st.button("🚀 Анализировать документ"):
-                with st.spinner("Blyk распознает печати и реквизиты..."):
+                with st.spinner("Blyk сканирует документ и ищет QR-коды..."):
                     try:
-                        # Конвертируем цензурированное изображение обратно в base64 для ИИ
+                        # 1. АВТОМАТИЧЕСКОЕ ЧТЕНИЕ QR-КОДА ЧЕРЕЗ OPENCV
+                        open_cv_image = np.array(image)
+                        open_cv_image = open_cv_image[:, :, ::-1].copy() # Переводим RGB в BGR (формат OpenCV)
+                        
+                        detector = cv2.QRCodeDetector()
+                        data, vertices_array, binary_qrcode = detector.detectAndDecode(open_cv_image)
+                        
+                        if data:
+                            qr_status = f"✅ Обнаружен скрытый QR-код! Он ведет на ссылку: {data}"
+                        else:
+                            qr_status = "⚠️ QR-код на бланке не обнаружен (либо он поврежден/затерт)."
+
+                        # 2. ПОДГОТОВКА ИЗОБРАЖЕНИЯ ДЛЯ НЕЙРОСЕТИ
                         buffered = io.BytesIO()
                         image.save(buffered, format="JPEG")
                         base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
                         mime_type = "image/jpeg"
                         
-                        prompt = """
+                        # 3. НОВЫЙ ПРОМПТ С УЧЕТОМ QR-КОДА
+                        prompt = f"""
                         Ты — строгий автоматический алгоритм-верификатор медицинских справок РФ.
                         Твоя задача — оценить подлинность документа по визуальным признакам и извлечь юридические данные.
                         
-                        КРИТИЧЕСКОЕ ПРАВИЛО: Если слово нечитаемо или скрыто черным цензурным блоком — пиши "[Скрыто]". Не придумывай слова!
+                        ИНФОРМАЦИЯ ОТ ВНУТРЕННЕГО СКАНЕРА QR-КОДОВ:
+                        {qr_status}
                         
+                        КРИТИЧЕСКОЕ ПРАВИЛО: Если слово нечитаемо или скрыто черным цензурным блоком — пиши "[Скрыто]". Не придумывай слова!
                         ОБЯЗАТЕЛЬНО: Первая строка твоего ответа должна быть СТРОГО "НАДЕЖНОСТЬ: X", где X — число от 0 до 100.
                         
                         Далее выведи строгий технический отчет:
-                        1. 📋 Наличие реквизитов: (Перечисли найденные печати. По ГОСТу должны быть: прямоугольный штамп учреждения, треугольная печать, круглая печать врача).
-                        2. 🏢 Юридический статус клиники: (Внимательно изучи печати. Найди ИНН или название. Если нашел, сформируй ссылку: [Проверить контрагента](https://www.rusprofile.ru/search?query=НАЗВАНИЕ_ИЛИ_ИНН)).
-                        3. 📅 Анализ дат: (Есть ли логические ошибки? Совпадает ли дата выдачи с периодом болезни?).
+                        1. 📋 Наличие реквизитов: (Перечисли найденные печати).
+                        2. 🏢 Юридический статус клиники: (Найди ИНН или название. Сформируй ссылку: [Проверить контрагента](https://www.rusprofile.ru/search?query=НАЗВАНИЕ_ИЛИ_ИНН)).
+                        3. 📅 Анализ дат: (Есть ли логические ошибки?).
                         4. 👁️ Визуальные аномалии: (Есть ли следы монтажа, разный цвет чернил).
-                        5. ⚖️ Вердикт: (Краткий вывод).
+                        5. 🔗 QR-анализ: (Используй информацию от внутреннего сканера. Если ссылка есть, оцени, похожа ли она на официальный сайт клиники или это подозрительный сайт. Если QR нет, укажи, что для современных справок частных клиник это может быть минусом).
+                        6. ⚖️ Вердикт: (Краткий вывод).
                         """
                         
                         response = requests.post(
@@ -140,7 +151,6 @@ if uploaded_file is not None:
                                     score = int(match.group(1))
                                     clean_text = re.sub(r'НАДЕЖНОСТЬ:.*\n', '', ai_text, flags=re.IGNORECASE).strip()
                                     
-                                    # Визуализация шкалы
                                     if score >= 80:
                                         st.success(f"✅ **Уровень доверия: {score}%** (Документ выглядит подлинным)")
                                     elif score >= 50:
@@ -149,15 +159,11 @@ if uploaded_file is not None:
                                         st.error(f"🚨 **Уровень доверия: {score}%** (Высокий риск подделки!)")
                                         
                                     st.progress(score / 100)
-                                    
-                                    # Вывод красивого текста
                                     st.markdown(clean_text)
                                     
-                                    # КНОПКА КОПИРОВАНИЯ В ОДИН КЛИК
                                     st.markdown("<br>", unsafe_allow_html=True)
                                     with st.expander("📋 Скопировать отчет в один клик"):
                                         st.code(clean_text, language="markdown")
-                                        
                                 else:
                                     st.markdown(ai_text)
                             else:
@@ -167,4 +173,3 @@ if uploaded_file is not None:
                             
                     except Exception as e:
                         st.error(f"Внутренняя ошибка: {e}")
-                        
