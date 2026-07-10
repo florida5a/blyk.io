@@ -2,7 +2,8 @@ import streamlit as st
 import requests
 import base64
 import re
-import urllib.parse
+from PIL import Image, ImageDraw
+import io
 
 # Настройка страницы (Широкий экран, скрываем сайдбары)
 st.set_page_config(page_title="Blyk.io | ИИ-проверка", page_icon="👁️", layout="wide", initial_sidebar_state="collapsed")
@@ -49,9 +50,29 @@ if uploaded_file is not None:
     
     col1, col2 = st.columns([4.5, 5.5], gap="large")
     
+    # Левая колонка: Фото и умная цензура
     with col1:
-        st.image(uploaded_file, use_container_width=True)
+        # Открываем изображение через PIL
+        image = Image.open(uploaded_file).convert("RGB")
         
+        st.markdown("##### 🛡️ Защита данных (PII)")
+        censor_toggle = st.checkbox("Включить авто-цензуру ФИО", value=True)
+        
+        if censor_toggle:
+            # Ползунок для выбора зоны скрытия
+            censor_range = st.slider("Настройте черную полосу (зона скрытия сверху-вниз в %)", 0, 100, (20, 35))
+            
+            # Рисуем черный прямоугольник на копии изображения
+            draw = ImageDraw.Draw(image)
+            w, h = image.size
+            y0 = int(h * (censor_range[0] / 100))
+            y1 = int(h * (censor_range[1] / 100))
+            draw.rectangle([0, y0, w, y1], fill="black")
+            st.caption("Отрегулируйте ползунок так, чтобы черная полоса закрыла ФИО пациента.")
+            
+        st.image(image, use_container_width=True)
+        
+    # Правая колонка: Анализ и результаты
     with col2:
         if "OPENROUTER_API_KEY" not in st.secrets:
             st.error("Системное уведомление: Добавьте API-ключ в настройки Secrets.")
@@ -59,29 +80,31 @@ if uploaded_file is not None:
             api_key = st.secrets["OPENROUTER_API_KEY"]
             
             st.markdown("### ⚡ Запуск верификации")
-            st.write("ИИ проверит ГОСТ-реквизиты, логику и найдет ИНН/название клиники для проверки в базе ЕГРЮЛ.")
+            st.write("ИИ проверит ГОСТ-реквизиты и логику документа (ФИО пациента не передаются на сервер).")
             st.markdown("<br>", unsafe_allow_html=True)
             
             if st.button("🚀 Анализировать документ"):
                 with st.spinner("Blyk распознает печати и реквизиты..."):
                     try:
-                        bytes_data = uploaded_file.getvalue()
-                        base64_image = base64.b64encode(bytes_data).decode('utf-8')
-                        mime_type = uploaded_file.type
+                        # Конвертируем цензурированное изображение обратно в base64 для ИИ
+                        buffered = io.BytesIO()
+                        image.save(buffered, format="JPEG")
+                        base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
+                        mime_type = "image/jpeg"
                         
                         prompt = """
                         Ты — строгий автоматический алгоритм-верификатор медицинских справок РФ.
                         Твоя задача — оценить подлинность документа по визуальным признакам и извлечь юридические данные.
                         
-                        КРИТИЧЕСКОЕ ПРАВИЛО: Если слово нечитаемо — пиши "[Неразборчиво]". Не придумывай слова!
+                        КРИТИЧЕСКОЕ ПРАВИЛО: Если слово нечитаемо или скрыто черным цензурным блоком — пиши "[Скрыто]". Не придумывай слова!
                         
                         ОБЯЗАТЕЛЬНО: Первая строка твоего ответа должна быть СТРОГО "НАДЕЖНОСТЬ: X", где X — число от 0 до 100.
                         
                         Далее выведи строгий технический отчет:
-                        1. 📋 Наличие реквизитов: (Перечисли найденные печати. По ГОСТу должны быть: прямоугольный штамп учреждения, треугольная печать, круглая печать врача, подпись).
-                        2. 🏢 Юридический статус клиники: (Внимательно изучи прямоугольный штамп и круглые печати. Найди ИНН, ОГРН или точное название клиники. Выпиши их. Если нашел, сформируй markdown-ссылку для проверки: [Проверить клинику в базе ФНС (Rusprofile)](https://www.rusprofile.ru/search?query=НАЗВАНИЕ_ИЛИ_ИНН). Замени НАЗВАНИЕ_ИЛИ_ИНН на найденные данные).
+                        1. 📋 Наличие реквизитов: (Перечисли найденные печати. По ГОСТу должны быть: прямоугольный штамп учреждения, треугольная печать, круглая печать врача).
+                        2. 🏢 Юридический статус клиники: (Внимательно изучи печати. Найди ИНН или название. Если нашел, сформируй ссылку: [Проверить контрагента](https://www.rusprofile.ru/search?query=НАЗВАНИЕ_ИЛИ_ИНН)).
                         3. 📅 Анализ дат: (Есть ли логические ошибки? Совпадает ли дата выдачи с периодом болезни?).
-                        4. 👁️ Визуальные аномалии: (Есть ли следы фотошопа, разный цвет чернил).
+                        4. 👁️ Визуальные аномалии: (Есть ли следы монтажа, разный цвет чернил).
                         5. ⚖️ Вердикт: (Краткий вывод).
                         """
                         
@@ -117,6 +140,7 @@ if uploaded_file is not None:
                                     score = int(match.group(1))
                                     clean_text = re.sub(r'НАДЕЖНОСТЬ:.*\n', '', ai_text, flags=re.IGNORECASE).strip()
                                     
+                                    # Визуализация шкалы
                                     if score >= 80:
                                         st.success(f"✅ **Уровень доверия: {score}%** (Документ выглядит подлинным)")
                                     elif score >= 50:
@@ -125,7 +149,15 @@ if uploaded_file is not None:
                                         st.error(f"🚨 **Уровень доверия: {score}%** (Высокий риск подделки!)")
                                         
                                     st.progress(score / 100)
+                                    
+                                    # Вывод красивого текста
                                     st.markdown(clean_text)
+                                    
+                                    # КНОПКА КОПИРОВАНИЯ В ОДИН КЛИК
+                                    st.markdown("<br>", unsafe_allow_html=True)
+                                    with st.expander("📋 Скопировать отчет в один клик"):
+                                        st.code(clean_text, language="markdown")
+                                        
                                 else:
                                     st.markdown(ai_text)
                             else:
@@ -135,3 +167,4 @@ if uploaded_file is not None:
                             
                     except Exception as e:
                         st.error(f"Внутренняя ошибка: {e}")
+                        
