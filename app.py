@@ -7,67 +7,166 @@ import io
 import cv2
 import numpy as np
 
-# Настройка страницы
+# 1. Базовая настройка страницы
 st.set_page_config(page_title="Blyk.io | ИИ-проверка", page_icon="👁️", layout="wide", initial_sidebar_state="collapsed")
 
-# Премиальный CSS 
-st.markdown("""
+# 2. Логика переключения тем (Светлая / Темная)
+if "dark_mode" not in st.session_state:
+    st.session_state.dark_mode = True # Темная тема по умолчанию
+
+# Выводим тумблер в правый верхний угол
+_, toggle_col = st.columns([8.5, 1.5])
+with toggle_col:
+    is_dark = st.toggle("🌙 Темный режим", value=st.session_state.dark_mode)
+    st.session_state.dark_mode = is_dark
+
+# 3. Цветовые палитры для тем
+if st.session_state.dark_mode:
+    bg_color = "#0b1120"          # Глубокий темный фон
+    card_bg = "#1e293b"           # Фон карточек
+    text_main = "#f8fafc"         # Основной текст (белый)
+    text_muted = "#94a3b8"        # Второстепенный текст (серый)
+    border_color = "rgba(255, 255, 255, 0.1)"
+    title_gradient = "linear-gradient(135deg, #38bdf8 0%, #818cf8 100%)"
+else:
+    bg_color = "#f8fafc"          # Светлый фон
+    card_bg = "#ffffff"           # Белые карточки
+    text_main = "#0f172a"         # Темный текст
+    text_muted = "#64748b"        # Второстепенный текст
+    border_color = "rgba(0, 0, 0, 0.1)"
+    title_gradient = "linear-gradient(135deg, #0284c7 0%, #4f46e5 100%)"
+
+# 4. Внедрение динамического CSS (f-string позволяет подставлять переменные)
+st.markdown(f"""
     <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    .block-container { padding-top: 3rem !important; max-width: 1200px; }
-    .blyk-title {
+    /* Скрываем элементы управления Streamlit */
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
+    header {{visibility: hidden;}}
+    
+    /* Главный фон приложения */
+    [data-testid="stAppViewContainer"] {{
+        background-color: {bg_color};
+        transition: background-color 0.4s ease;
+    }}
+    
+    /* Настройка ширины и отступов */
+    .block-container {{ 
+        padding-top: 1rem !important; 
+        max-width: 1200px; 
+    }}
+    
+    /* Премиальный градиентный заголовок */
+    .blyk-title {{
         font-family: 'Inter', -apple-system, sans-serif;
-        font-size: 4rem;
+        font-size: 4.5rem;
         font-weight: 900;
-        background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+        background: {title_gradient};
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        text-align: center; margin-bottom: 0; padding-bottom: 0; letter-spacing: -1px;
-    }
-    .blyk-subtitle {
+        text-align: center; 
+        margin-bottom: 0; 
+        padding-bottom: 0; 
+        letter-spacing: -2px;
+    }}
+    
+    /* Подзаголовок */
+    .blyk-subtitle {{
         font-family: 'Inter', -apple-system, sans-serif;
-        font-size: 1.2rem; color: #8892b0; text-align: center; margin-top: -10px; margin-bottom: 3rem; font-weight: 400;
-    }
-    .stButton>button {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white !important; border: none; border-radius: 12px; padding: 0.8rem 2rem; font-size: 1.1rem; font-weight: 600; width: 100%; transition: all 0.3s ease; box-shadow: 0 4px 15px rgba(118, 75, 162, 0.4);
-    }
-    .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(118, 75, 162, 0.7); border: none; }
-    img { border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.05); }
-    .stAlert { border-radius: 12px !important; border: none !important; }
+        font-size: 1.2rem; 
+        color: {text_muted}; 
+        text-align: center; 
+        margin-top: -10px; 
+        margin-bottom: 3rem; 
+        font-weight: 400;
+    }}
+    
+    /* Глобальный цвет текста */
+    .stMarkdown p, .stMarkdown li {{
+        color: {text_main} !important;
+    }}
+    h1, h2, h3, h4, h5 {{
+        color: {text_main} !important;
+    }}
+    
+    /* Стилизация зоны загрузки файлов */
+    [data-testid="stFileUploadDropzone"] {{
+        background-color: {card_bg};
+        border: 2px dashed {border_color};
+        border-radius: 16px;
+        transition: all 0.3s ease;
+    }}
+    [data-testid="stFileUploadDropzone"]:hover {{
+        border-color: #6366f1;
+        background-color: rgba(99, 102, 241, 0.05);
+    }}
+    
+    /* Главная кнопка */
+    .stButton>button {{
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        color: white !important; 
+        border: none; 
+        border-radius: 12px; 
+        padding: 0.8rem 2rem; 
+        font-size: 1.1rem; 
+        font-weight: 600; 
+        width: 100%; 
+        transition: all 0.3s ease; 
+        box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+    }}
+    .stButton>button:hover {{ 
+        transform: translateY(-2px); 
+        box-shadow: 0 8px 25px rgba(99, 102, 241, 0.6); 
+    }}
+    
+    /* Скругление изображений */
+    img {{ 
+        border-radius: 16px; 
+        box-shadow: 0 10px 30px rgba(0,0,0,0.15); 
+        border: 1px solid {border_color}; 
+    }}
+    
+    /* Блоки с результатами (Alerts) */
+    .stAlert {{ 
+        border-radius: 12px !important; 
+        border: 1px solid {border_color} !important; 
+        background-color: {card_bg} !important;
+    }}
     </style>
 """, unsafe_allow_html=True)
 
-# Шапка
+# 5. Шапка интерфейса
 st.markdown('<div class="blyk-title">👁️ Blyk.io</div>', unsafe_allow_html=True)
-st.markdown('<div class="blyk-subtitle">AI-рентген для проверки медицинских документов</div>', unsafe_allow_html=True)
+st.markdown('<div class="blyk-subtitle">Интеллектуальный анализ и верификация медицинских документов</div>', unsafe_allow_html=True)
 
+# 6. Зона загрузки
 uploaded_file = st.file_uploader("Перетащите скан или фото справки сюда", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
     st.markdown("<br>", unsafe_allow_html=True)
     
+    # Сетка интерфейса
     col1, col2 = st.columns([4.5, 5.5], gap="large")
     
+    # ЛЕВАЯ КОЛОНКА (Документ и цензура)
     with col1:
         image = Image.open(uploaded_file).convert("RGB")
         
-        st.markdown("##### 🛡️ Защита данных (PII)")
-        censor_toggle = st.checkbox("Включить авто-цензуру ФИО", value=True)
+        st.markdown("##### 🛡️ Настройки приватности (PII)")
+        censor_toggle = st.checkbox("Включить авто-цензуру ФИО пациента", value=True)
         
         if censor_toggle:
-            censor_range = st.slider("Настройте черную полосу (зона скрытия сверху-вниз в %)", 0, 100, (20, 35))
+            censor_range = st.slider("Отрегулируйте черную полосу (сверху-вниз в %)", 0, 100, (20, 35))
             draw = ImageDraw.Draw(image)
             w, h = image.size
             y0 = int(h * (censor_range[0] / 100))
             y1 = int(h * (censor_range[1] / 100))
-            draw.rectangle([0, y0, w, y1], fill="black")
-            st.caption("Отрегулируйте ползунок так, чтобы черная полоса закрыла ФИО пациента.")
+            draw.rectangle([0, y0, w, y1], fill="#0f172a") # Глубокий сине-черный цвет цензуры
+            st.caption("Данные под полосой не будут отправлены на сервер.")
             
         st.image(image, use_container_width=True)
         
+    # ПРАВАЯ КОЛОНКА (Управление ИИ и Отчет)
     with col2:
         if "OPENROUTER_API_KEY" not in st.secrets:
             st.error("Системное уведомление: Добавьте API-ключ в настройки Secrets.")
@@ -81,9 +180,9 @@ if uploaded_file is not None:
             if st.button("🚀 Анализировать документ"):
                 with st.spinner("Blyk сканирует документ и ищет QR-коды..."):
                     try:
-                        # 1. АВТОМАТИЧЕСКОЕ ЧТЕНИЕ QR-КОДА ЧЕРЕЗ OPENCV
+                        # QR Сканнер (OpenCV)
                         open_cv_image = np.array(image)
-                        open_cv_image = open_cv_image[:, :, ::-1].copy() # Переводим RGB в BGR (формат OpenCV)
+                        open_cv_image = open_cv_image[:, :, ::-1].copy()
                         
                         detector = cv2.QRCodeDetector()
                         data, vertices_array, binary_qrcode = detector.detectAndDecode(open_cv_image)
@@ -91,32 +190,32 @@ if uploaded_file is not None:
                         if data:
                             qr_status = f"✅ Обнаружен скрытый QR-код! Он ведет на ссылку: {data}"
                         else:
-                            qr_status = "⚠️ QR-код на бланке не обнаружен (либо он поврежден/затерт)."
+                            qr_status = "⚠️ QR-код на бланке не обнаружен."
 
-                        # 2. ПОДГОТОВКА ИЗОБРАЖЕНИЯ ДЛЯ НЕЙРОСЕТИ
+                        # Подготовка к отправке
                         buffered = io.BytesIO()
                         image.save(buffered, format="JPEG")
                         base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
                         mime_type = "image/jpeg"
                         
-                        # 3. НОВЫЙ ПРОМПТ С УЧЕТОМ QR-КОДА
+                        # Запрос к нейросети
                         prompt = f"""
                         Ты — строгий автоматический алгоритм-верификатор медицинских справок РФ.
-                        Твоя задача — оценить подлинность документа по визуальным признакам и извлечь юридические данные.
+                        Твоя задача — оценить подлинность документа по визуальным признакам.
                         
-                        ИНФОРМАЦИЯ ОТ ВНУТРЕННЕГО СКАНЕРА QR-КОДОВ:
+                        ИНФОРМАЦИЯ ОТ QR-СКАНЕРА:
                         {qr_status}
                         
-                        КРИТИЧЕСКОЕ ПРАВИЛО: Если слово нечитаемо или скрыто черным цензурным блоком — пиши "[Скрыто]". Не придумывай слова!
+                        КРИТИЧЕСКОЕ ПРАВИЛО: Если слово скрыто цензурой — пиши "[Скрыто]".
                         ОБЯЗАТЕЛЬНО: Первая строка твоего ответа должна быть СТРОГО "НАДЕЖНОСТЬ: X", где X — число от 0 до 100.
                         
-                        Далее выведи строгий технический отчет:
-                        1. 📋 Наличие реквизитов: (Перечисли найденные печати).
-                        2. 🏢 Юридический статус клиники: (Найди ИНН или название. Сформируй ссылку: [Проверить контрагента](https://www.rusprofile.ru/search?query=НАЗВАНИЕ_ИЛИ_ИНН)).
-                        3. 📅 Анализ дат: (Есть ли логические ошибки?).
-                        4. 👁️ Визуальные аномалии: (Есть ли следы монтажа, разный цвет чернил).
-                        5. 🔗 QR-анализ: (Используй информацию от внутреннего сканера. Если ссылка есть, оцени, похожа ли она на официальный сайт клиники или это подозрительный сайт. Если QR нет, укажи, что для современных справок частных клиник это может быть минусом).
-                        6. ⚖️ Вердикт: (Краткий вывод).
+                        Отчет:
+                        1. 📋 Наличие реквизитов (штампы, печати).
+                        2. 🏢 Юридический статус (поиск ИНН/Названия + генерация ссылки на Rusprofile).
+                        3. 📅 Анализ дат.
+                        4. 👁️ Визуальные аномалии.
+                        5. 🔗 QR-анализ.
+                        6. ⚖️ Итоговый вердикт.
                         """
                         
                         response = requests.post(
@@ -162,7 +261,7 @@ if uploaded_file is not None:
                                     st.markdown(clean_text)
                                     
                                     st.markdown("<br>", unsafe_allow_html=True)
-                                    with st.expander("📋 Скопировать отчет в один клик"):
+                                    with st.expander("📋 Скопировать отчет (MD)"):
                                         st.code(clean_text, language="markdown")
                                 else:
                                     st.markdown(ai_text)
