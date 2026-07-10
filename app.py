@@ -96,5 +96,92 @@ if uploaded_file is not None:
         st.image(uploaded_file, use_container_width=True)
         
     with col2:
-        if "OPENROUTER_API_KEY" not
-        
+        if "OPENROUTER_API_KEY" not in st.secrets:
+            st.error("Системное уведомление: Добавьте API-ключ в настройки Secrets.")
+        else:
+            api_key = st.secrets["OPENROUTER_API_KEY"]
+            
+            st.markdown("### ⚡ Запуск верификации")
+            st.write("Строгий автоматический алгоритм-верификатор проверит документ по стандартам ГОСТ.")
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            if st.button("🚀 Анализировать документ"):
+                with st.spinner("Blyk ищет обязательные реквизиты..."):
+                    try:
+                        bytes_data = uploaded_file.getvalue()
+                        base64_image = base64.b64encode(bytes_data).decode('utf-8')
+                        mime_type = uploaded_file.type
+                        
+                        # НОВЫЙ БРОНЕБОЙНЫЙ ПРОМПТ
+                        prompt = """
+                        Ты — строгий автоматический алгоритм-верификатор медицинских справок РФ (форма 095/у, 086/у).
+                        Твоя задача — жестко оценить подлинность документа ТОЛЬКО по визуальным признакам и стандартам ГОСТ.
+                        
+                        КРИТИЧЕСКОЕ ПРАВИЛО: Почерк врачей сложен. Если ты не можешь точно прочитать слово на 100%, КАТЕГОРИЧЕСКИ ЗАПРЕЩАЕТСЯ придумывать несуществующие слова, иероглифы или бессмысленные наборы букв. Просто пиши: "[Неразборчиво]".
+                        
+                        Обязательные элементы ГОСТ для справки (проверь их наличие на фото):
+                        1. Прямоугольный штамп медицинского учреждения (обычно вверху слева).
+                        2. Треугольная печать (для больничных листов/справок).
+                        3. Круглая личная печать лечащего врача.
+                        4. Подпись врача.
+                        5. Четкие даты выдачи и периоды освобождения от занятий/работы.
+                        
+                        ОБЯЗАТЕЛЬНО: Первая строка твоего ответа должна быть СТРОГО "НАДЕЖНОСТЬ: X", где X — число от 0 до 100.
+                        
+                        Далее выведи строгий технический отчет:
+                        1. 📋 Наличие реквизитов: (Перечисли, какие из 3 обязательных печатей и штампов найдены, а каких не хватает).
+                        2. 📅 Анализ дат: (Есть ли логические ошибки? Совпадает ли дата выдачи с периодом болезни?).
+                        3. 👁️ Визуальные аномалии: (Есть ли следы монтажа, разный цвет чернил, наложение текста поверх печатей).
+                        4. ⚖️ Вердикт: (Краткий вывод для HR/Деканата, почему выставлен такой процент надежности).
+                        """
+                        
+                        response = requests.post(
+                            url="https://openrouter.ai/api/v1/chat/completions",
+                            headers={
+                                "Authorization": f"Bearer {api_key}",
+                                "Content-Type": "application/json"
+                            },
+                            json={
+                                "model": "openrouter/free",
+                                "messages": [
+                                    {
+                                        "role": "user",
+                                        "content": [
+                                            {"type": "text", "text": prompt},
+                                            {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{base64_image}"}}
+                                        ]
+                                    }
+                                ]
+                            }
+                        )
+                        
+                        if response.status_code == 200:
+                            result_json = response.json()
+                            if 'choices' in result_json and len(result_json['choices']) > 0:
+                                ai_text = result_json['choices'][0]['message']['content']
+                                match = re.search(r'НАДЕЖНОСТЬ:\s*(\d+)', ai_text, re.IGNORECASE)
+                                
+                                st.divider()
+                                
+                                if match:
+                                    score = int(match.group(1))
+                                    clean_text = re.sub(r'НАДЕЖНОСТЬ:.*\n', '', ai_text, flags=re.IGNORECASE).strip()
+                                    
+                                    if score >= 80:
+                                        st.success(f"✅ **Уровень доверия: {score}%** (Документ выглядит подлинным)")
+                                    elif score >= 50:
+                                        st.warning(f"⚠️ **Уровень доверия: {score}%** (Требуется ручная проверка)")
+                                    else:
+                                        st.error(f"🚨 **Уровень доверия: {score}%** (Высокий риск подделки!)")
+                                        
+                                    st.progress(score / 100)
+                                    st.markdown(clean_text)
+                                else:
+                                    st.markdown(ai_text)
+                            else:
+                                st.error("Получен пустой ответ от серверов нейросети.")
+                        else:
+                            st.error(f"Ошибка API: {response.status_code}")
+                            
+                    except Exception as e:
+                        st.error(f"Внутренняя ошибка: {e}")
