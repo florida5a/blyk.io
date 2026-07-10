@@ -1,6 +1,6 @@
 import streamlit as st
-import requests
-import base64
+import google.generativeai as genai
+from PIL import Image
 
 # Настройка вкладки браузера
 st.set_page_config(page_title="Blyk.io — ИИ-проверка справок", page_icon="👁️", layout="centered")
@@ -8,7 +8,7 @@ st.set_page_config(page_title="Blyk.io — ИИ-проверка справок"
 # Главный заголовок
 st.title("👁️ Blyk.io")
 st.subheader("ИИ-рентген для медицинских справок")
-st.write("Привет! Это рабочая система проверки медицинских документов на подлинность на базе Google Gemini.")
+st.write("Привет! Это рабочая система проверки медицинских документов на подлинность.")
 
 st.divider()
 
@@ -21,20 +21,18 @@ uploaded_file = st.file_uploader(
 if uploaded_file is not None:
     st.image(uploaded_file, caption="Загруженная справка", use_container_width=True)
     
-    # Проверяем, на месте ли наш секретный сейф с ключом
+    # Проверяем ключ в сейфе Стримлита
     if "GEMINI_API_KEY" not in st.secrets:
         st.error("Ошибка: Ключ GEMINI_API_KEY не найден в настройках (Secrets) вашего Streamlit!")
     else:
-        api_key = st.secrets["GEMINI_API_KEY"]
+        # Инициализируем официальный клиент Google ИИ с твоим новым AQ-ключом
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
         
-        # Появляется кнопка для запуска анализа
         if st.button("🚀 Запустить ИИ-анализ справки"):
-            with st.spinner("Blyk изучает пиксели, текст и логику дат через Gemini..."):
+            with st.spinner("Blyk изучает документ через официальный модуль Gemini..."):
                 try:
-                    # Кодируем картинку в формат, который понимает нейросеть
-                    bytes_data = uploaded_file.getvalue()
-                    base64_image = base64.b64encode(bytes_data).decode('utf-8')
-                    mime_type = uploaded_file.type
+                    # Открываем картинку правильным для библиотеки способом
+                    image = Image.open(uploaded_file)
                     
                     # Промпт-инструкция для ИИ
                     prompt = """
@@ -54,37 +52,12 @@ if uploaded_file is not None:
                     - 💡 Рекомендация для проверяющего (HR или деканата)
                     """
                     
-                    # Запрос к Gemini API
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+                    # Вызываем актуальную модель напрямую через библиотеку Google
+                    model = genai.GenerativeModel('gemini-2.5-flash')
+                    response = model.generate_content([prompt, image])
                     
-                    payload = {
-                        "contents": [
-                            {
-                                "parts": [
-                                    {"text": prompt},
-                                    {
-                                        "inlineData": {
-                                            "mimeType": mime_type,
-                                            "data": base64_image
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                    headers = {"Content-Type": "application/json"}
-                    
-                    # Отправляем данные
-                    response = requests.post(url, json=payload, headers=headers)
-                    
-                    if response.status_code == 200:
-                        result_json = response.json()
-                        ai_text = result_json['contents'][0]['parts'][0]['text']
-                        st.success("Анализ Blyk.io завершен!")
-                        st.markdown(ai_text) # Выводим красивый ответ ИИ
-                    else:
-                        st.error(f"Ошибка API: {response.status_code}")
-                        st.write(response.text)
+                    st.success("Анализ Blyk.io завершен!")
+                    st.markdown(response.text) # Выводим ответ
                         
                 except Exception as e:
-                    st.error(f"Произошла ошибка при обработке: {e}")
+                    st.error(f"Произошла ошибка при работе с Google ИИ: {e}")
