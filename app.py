@@ -1,18 +1,16 @@
 import streamlit as st
-import google.generativeai as genai
-from PIL import Image
+import requests
+import base64
 
 # Настройка вкладки браузера
 st.set_page_config(page_title="Blyk.io — ИИ-проверка справок", page_icon="👁️", layout="centered")
 
-# Главный заголовок
 st.title("👁️ Blyk.io")
 st.subheader("ИИ-рентген для медицинских справок")
 st.write("Привет! Это рабочая система проверки медицинских документов на подлинность.")
 
 st.divider()
 
-# Кнопка загрузки файла
 uploaded_file = st.file_uploader(
     "Загрузите скан или фото справки (форма 095/у, 086/у и др.)", 
     type=["jpg", "jpeg", "png"]
@@ -21,18 +19,18 @@ uploaded_file = st.file_uploader(
 if uploaded_file is not None:
     st.image(uploaded_file, caption="Загруженная справка", use_container_width=True)
     
-    # Проверяем ключ в сейфе Стримлита
-    if "GEMINI_API_KEY" not in st.secrets:
-        st.error("Ошибка: Ключ GEMINI_API_KEY не найден в настройках (Secrets) вашего Streamlit!")
+    if "OPENROUTER_API_KEY" not in st.secrets:
+        st.error("Ошибка: Ключ OPENROUTER_API_KEY не найден в настройках Secrets!")
     else:
-        # Инициализируем официальный клиент Google ИИ с твоим новым AQ-ключом
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        api_key = st.secrets["OPENROUTER_API_KEY"]
         
         if st.button("🚀 Запустить ИИ-анализ справки"):
-            with st.spinner("Blyk изучает документ через официальный модуль Gemini..."):
+            with st.spinner("Blyk изучает документ через независимый ИИ-модуль..."):
                 try:
-                    # Открываем картинку правильным для библиотеки способом
-                    image = Image.open(uploaded_file)
+                    # Кодируем картинку в base64
+                    bytes_data = uploaded_file.getvalue()
+                    base64_image = base64.b64encode(bytes_data).decode('utf-8')
+                    mime_type = uploaded_file.type
                     
                     # Промпт-инструкция для ИИ
                     prompt = """
@@ -52,12 +50,40 @@ if uploaded_file is not None:
                     - 💡 Рекомендация для проверяющего (HR или деканата)
                     """
                     
-                    # Вызываем актуальную модель напрямую через библиотеку Google
-                    model = genai.GenerativeModel('gemini-2.0-flash')
-                    response = model.generate_content([prompt, image])
+                    # Отправляем запрос на OpenRouter (используем бесплатную Vision-модель)
+                    response = requests.post(
+                        url="https://openrouter.ai/api/v1/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {api_key}",
+                            "Content-Type": "application/json"
+                        },
+                        json={
+                            "model": "meta-llama/llama-3.2-11b-vision-instruct:free",
+                            "messages": [
+                                {
+                                    "role": "user",
+                                    "content": [
+                                        {"type": "text", "text": prompt},
+                                        {
+                                            "type": "image_url",
+                                            "image_url": {
+                                                "url": f"data:{mime_type};base64,{base64_image}"
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    )
                     
-                    st.success("Анализ Blyk.io завершен!")
-                    st.markdown(response.text) # Выводим ответ
+                    if response.status_code == 200:
+                        result_json = response.json()
+                        ai_text = result_json['choices'][0]['message']['content']
+                        st.success("Анализ Blyk.io завершен!")
+                        st.markdown(ai_text)
+                    else:
+                        st.error(f"Ошибка OpenRouter: {response.status_code}")
+                        st.write(response.text)
                         
                 except Exception as e:
-                    st.error(f"Произошла ошибка при работе с Google ИИ: {e}")
+                    st.error(f"Произошла ошибка при обработке: {e}")
