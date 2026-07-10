@@ -3,80 +3,97 @@ import requests
 import base64
 import re
 
-# 1. Настройка страницы (Широкий экран, скрываем сайдбары по умолчанию)
+# Настройка страницы (Широкий экран, скрываем сайдбары)
 st.set_page_config(page_title="Blyk.io | ИИ-проверка", page_icon="👁️", layout="wide", initial_sidebar_state="collapsed")
 
-# 2. Инъекция современного CSS-дизайна
+# Премиальный CSS (Dribbble-style, адаптирован под темную тему)
 st.markdown("""
     <style>
-    /* Скрываем дефолтные элементы Streamlit */
+    /* Скрываем дефолтный мусор Streamlit */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
-    /* Настройка главного контейнера (добавляем воздуха) */
+    /* Добавляем воздуха сверху */
     .block-container {
-        padding-top: 2rem;
+        padding-top: 3rem !important;
         max-width: 1200px;
     }
     
-    /* Стилизация заголовков */
+    /* Градиентный заголовок по центру */
     .blyk-title {
-        font-family: 'Inter', sans-serif;
-        font-size: 3rem;
+        font-family: 'Inter', -apple-system, sans-serif;
+        font-size: 4rem;
         font-weight: 900;
-        color: #0f172a;
-        margin-bottom: 0px;
-        padding-bottom: 0px;
-    }
-    .blyk-subtitle {
-        font-family: 'Inter', sans-serif;
-        font-size: 1.1rem;
-        color: #64748b;
-        margin-top: -10px;
-        margin-bottom: 30px;
+        background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-align: center;
+        margin-bottom: 0;
+        padding-bottom: 0;
+        letter-spacing: -1px;
     }
     
-    /* Стилизация главной кнопки */
+    /* Аккуратный подзаголовок */
+    .blyk-subtitle {
+        font-family: 'Inter', -apple-system, sans-serif;
+        font-size: 1.2rem;
+        color: #8892b0;
+        text-align: center;
+        margin-top: -10px;
+        margin-bottom: 3rem;
+        font-weight: 400;
+    }
+    
+    /* Стилизация главной кнопки (Неоновое свечение) */
     .stButton>button {
-        background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
-        color: white;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white !important;
         border: none;
-        border-radius: 10px;
-        padding: 0.75rem 2rem;
+        border-radius: 12px;
+        padding: 0.8rem 2rem;
         font-size: 1.1rem;
         font-weight: 600;
         width: 100%;
-        transition: transform 0.2s, box-shadow 0.2s;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(118, 75, 162, 0.4);
     }
     .stButton>button:hover {
         transform: translateY(-2px);
-        box-shadow: 0 10px 20px -10px rgba(37, 99, 235, 0.5);
-        color: white;
+        box-shadow: 0 8px 25px rgba(118, 75, 162, 0.7);
         border: none;
     }
     
-    /* Скругление углов у загруженных изображений */
+    /* Скругление углов у картинок и легкая тень */
     img {
-        border-radius: 12px;
-        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        border: 1px solid rgba(255,255,255,0.05);
+    }
+    
+    /* Кастомные плашки с результатами */
+    .stAlert {
+        border-radius: 12px !important;
+        border: none !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# 3. Шапка сайта
+# Шапка сайта по центру
 st.markdown('<div class="blyk-title">👁️ Blyk.io</div>', unsafe_allow_html=True)
-st.markdown('<div class="blyk-subtitle">Анализ медицинских документов на базе ИИ</div>', unsafe_allow_html=True)
+st.markdown('<div class="blyk-subtitle">AI-рентген для проверки медицинских документов</div>', unsafe_allow_html=True)
 
-# 4. Основной интерфейс
+# Зона загрузки
 uploaded_file = st.file_uploader("Перетащите скан или фото справки сюда", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    # Разделяем на 2 колонки: 40% фото, 60% интерфейс анализа
-    col1, col2 = st.columns([4, 6], gap="large")
+    st.markdown("<br>", unsafe_allow_html=True) # Отступ
+    
+    # Разделяем на 2 колонки: 45% фото, 55% интерфейс анализа
+    col1, col2 = st.columns([4.5, 5.5], gap="large")
     
     with col1:
-        st.image(uploaded_file, caption="Исходный файл", use_container_width=True)
+        st.image(uploaded_file, use_container_width=True)
         
     with col2:
         if "OPENROUTER_API_KEY" not in st.secrets:
@@ -84,11 +101,12 @@ if uploaded_file is not None:
         else:
             api_key = st.secrets["OPENROUTER_API_KEY"]
             
-            st.markdown("### Запуск верификации")
-            st.write("Нейросеть проверит логику дат, диагнозы, штампы и выявит возможные визуальные артефакты.")
+            st.markdown("### ⚡ Запуск верификации")
+            st.write("Нейросеть проверит логику дат, диагнозы, штампы и выявит возможные визуальные артефакты (фотошоп).")
+            st.markdown("<br>", unsafe_allow_html=True)
             
             if st.button("🚀 Анализировать документ"):
-                with st.spinner("Идет сканирование..."):
+                with st.spinner("Blyk изучает пиксели..."):
                     try:
                         bytes_data = uploaded_file.getvalue()
                         base64_image = base64.b64encode(bytes_data).decode('utf-8')
