@@ -6,7 +6,7 @@ import base64
 st.set_page_config(page_title="Blyk.io — ИИ-проверка справок", page_icon="👁️", layout="centered")
 
 st.title("👁️ Blyk.io")
-st.subheader("ИИ-рентген для medical справок")
+st.subheader("ИИ-рентген для медицинских справок")
 st.write("Привет! Это рабочая система проверки медицинских документов на подлинность.")
 
 st.divider()
@@ -25,7 +25,7 @@ if uploaded_file is not None:
         api_key = st.secrets["OPENROUTER_API_KEY"]
         
         if st.button("🚀 Запустить ИИ-анализ справки"):
-            with st.spinner("Blyk изучает документ через стабильный ИИ-модуль..."):
+            with st.spinner("Blyk ищет свободную нейросеть и изучает документ..."):
                 try:
                     # Кодируем картинку в base64
                     bytes_data = uploaded_file.getvalue()
@@ -50,7 +50,7 @@ if uploaded_file is not None:
                     - 💡 Рекомендация для проверяющего (HR или деканата)
                     """
                     
-                    # Запрос к стабильной бесплатной модели Gemini 1.5 Flash через OpenRouter
+                    # Запрос к универсальному пулу бесплатных моделей через OpenRouter
                     response = requests.post(
                         url="https://openrouter.ai/api/v1/chat/completions",
                         headers={
@@ -58,7 +58,7 @@ if uploaded_file is not None:
                             "Content-Type": "application/json"
                         },
                         json={
-                            "model": "google/gemini-flash-1.5:free",
+                            "model": "openrouter/free",
                             "messages": [
                                 {
                                     "role": "user",
@@ -78,9 +78,12 @@ if uploaded_file is not None:
                     
                     if response.status_code == 200:
                         result_json = response.json()
-                        ai_text = result_json['choices'][0]['message']['content']
-                        st.success("Анализ Blyk.io завершен!")
-                        st.markdown(ai_text)
+                        if 'choices' in result_json and len(result_json['choices']) > 0:
+                            ai_text = result_json['choices'][0]['message']['content']
+                            st.success("Анализ Blyk.io завершен!")
+                            st.markdown(ai_text)
+                        else:
+                            st.error("Ответ от модели пришел пустым. Попробуйте нажать кнопку еще раз.")
                     else:
                         st.error(f"Ошибка OpenRouter: {response.status_code}")
                         st.write(response.text)
