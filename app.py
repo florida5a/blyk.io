@@ -6,7 +6,7 @@ import base64
 st.set_page_config(page_title="Blyk.io — ИИ-проверка справок", page_icon="👁️", layout="centered")
 
 st.title("👁️ Blyk.io")
-st.subheader("ИИ-рентген для медицинских справок")
+st.subheader("ИИ-рентген для medical справок")
 st.write("Привет! Это рабочая система проверки медицинских документов на подлинность.")
 
 st.divider()
@@ -25,7 +25,7 @@ if uploaded_file is not None:
         api_key = st.secrets["OPENROUTER_API_KEY"]
         
         if st.button("🚀 Запустить ИИ-анализ справки"):
-            with st.spinner("Blyk изучает документ через независимый ИИ-модуль..."):
+            with st.spinner("Blyk изучает документ через стабильный ИИ-модуль..."):
                 try:
                     # Кодируем картинку в base64
                     bytes_data = uploaded_file.getvalue()
@@ -50,7 +50,7 @@ if uploaded_file is not None:
                     - 💡 Рекомендация для проверяющего (HR или деканата)
                     """
                     
-                    # Отправляем запрос на OpenRouter (используем бесплатную Vision-модель)
+                    # Запрос к стабильной бесплатной модели Gemini 1.5 Flash через OpenRouter
                     response = requests.post(
                         url="https://openrouter.ai/api/v1/chat/completions",
                         headers={
@@ -58,7 +58,7 @@ if uploaded_file is not None:
                             "Content-Type": "application/json"
                         },
                         json={
-                            "model": "meta-llama/llama-3.2-11b-vision-instruct:free",
+                            "model": "google/gemini-flash-1.5:free",
                             "messages": [
                                 {
                                     "role": "user",
